@@ -28,6 +28,8 @@ contract TRC1155 is
   ERC1155SupplyUpgradeable,
   UUPSUpgradeable
 {
+  address public s_vendorAddress;
+
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
     _disableInitializers();
@@ -38,6 +40,7 @@ contract TRC1155 is
     uint256 tokenId,
     string memory uri,
     address shopAddress
+    
   ) public initializer {
     __ERC1155_init(uri);
     __Ownable_init(initialOwner, tokenId);
@@ -50,10 +53,20 @@ contract TRC1155 is
     //add operator => THERAS SHOP
   }
 
-  receive() external payable {
-    // Custom logic to handle the received Ether
-    // For example, emit an event or update contract state
+ receive() external payable {
+    // Ensure target contract is set
+        require(s_vendorAddress != address(0), "Target contract not set");
+
+        // Forward received Ether to target contract
+        (bool success, ) = s_vendorAddress.call{value: msg.value}("");
+        require(success, "Forwarding failed");
+
   }
+
+    // Function to set the vendor  address
+    function setVendorAddress(address _targetContract) external onlyOwner {
+        s_vendorAddress = _targetContract;
+    }
 
   // Function to withdraw Ether from the contract
   function withdrawEther(uint256 amount) external onlyOwner {

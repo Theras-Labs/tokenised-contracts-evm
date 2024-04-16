@@ -53,6 +53,8 @@ contract NFTProject is
   address public s_masterContractTRC1155;
   address public s_shopAddress;
   string private s_baseTokenURI; // Updated to state variablez
+  address public s_vendorAddress;
+
   using ClonesUpgradeable for address;
 
   enum ContractType {
@@ -97,14 +99,26 @@ contract NFTProject is
     __Ownable_init(initialOwner);
     s_baseTokenURI = baseTokenURI;
     s_shopAddress = _shopAddress;
+    s_vendorAddress = address(this);
 
   }
+
+
 
   receive() external payable {
-    // Custom logic to handle the received Ether
-    // For example, emit an event or update contract state
+    // Ensure target contract is set
+        require(s_vendorAddress != address(0), "Target contract not set");
+
+        // Forward received Ether to target contract
+        (bool success, ) = s_vendorAddress.call{value: msg.value}("");
+        require(success, "Forwarding failed");
+
   }
 
+    // Function to set the vendor  address
+    function setVendorAddress(address _targetContract) external onlyOwner {
+        s_vendorAddress = _targetContract;
+    }
   // Function to withdraw Ether from the contract
   function withdrawEther(uint256 amount) external onlyOwner {
     require(amount <= address(this).balance, "Insufficient Ether balance");
