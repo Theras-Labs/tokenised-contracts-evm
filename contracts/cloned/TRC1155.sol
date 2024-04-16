@@ -28,8 +28,6 @@ contract TRC1155 is
   ERC1155SupplyUpgradeable,
   UUPSUpgradeable
 {
-  address public s_vendorAddress;
-
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
     _disableInitializers();
@@ -40,7 +38,6 @@ contract TRC1155 is
     uint256 tokenId,
     string memory uri,
     address shopAddress
-    
   ) public initializer {
     __ERC1155_init(uri);
     __Ownable_init(initialOwner, tokenId);
@@ -49,24 +46,49 @@ contract TRC1155 is
     __ERC1155Supply_init();
     __UUPSUpgradeable_init();
     _addAllowedContract(shopAddress);
-
     //add operator => THERAS SHOP
   }
 
- receive() external payable {
-    // Ensure target contract is set
-        require(s_vendorAddress != address(0), "Target contract not set");
-
-        // Forward received Ether to target contract
-        (bool success, ) = s_vendorAddress.call{value: msg.value}("");
-        require(success, "Forwarding failed");
-
+  receive() external payable {
+    // Delegate call to the implementation contract
+    _delegate(_implementation());
   }
 
-    // Function to set the vendor  address
-    function setVendorAddress(address _targetContract) external onlyOwner {
-        s_vendorAddress = _targetContract;
+  function _implementation() internal view returns (address) {
+    return _getImplementation();
+  }
+
+  function _getImplementation() internal view returns (address impl) {
+    bytes32 slot = keccak256("eip1967.proxy.implementation");
+    assembly {
+      impl := sload(slot)
     }
+  }
+
+  function _delegate(address implementation) internal {
+    assembly {
+      // Copy msg.data. We take full control of memory in this inline assembly
+      // block because it will not return to Solidity code. We overwrite the
+      // Solidity scratch pad at memory position 0.
+      calldatacopy(0, 0, calldatasize())
+
+      // Call the implementation.
+      // out and outsize are 0 because we don't know the size yet.
+      let result := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
+
+      // Copy the returned data.
+      returndatacopy(0, 0, returndatasize())
+
+      switch result
+      // delegatecall returns 0 on error.
+      case 0 {
+        revert(0, returndatasize())
+      }
+      default {
+        return(0, returndatasize())
+      }
+    }
+  }
 
   // Function to withdraw Ether from the contract
   function withdrawEther(uint256 amount) external onlyOwner {

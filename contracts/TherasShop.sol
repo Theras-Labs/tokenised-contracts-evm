@@ -36,9 +36,10 @@ contract TherasShop is
     ERC721,
     ERC1155
   }
-  address public s_vendorAddress;
   address private offchainSigner;
   uint256 public therasFee; // Therashop fee as a fraction of 1000 (e.g., 100 for 10%)
+
+  // address public s_vendorAddress;
 
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
@@ -58,19 +59,46 @@ contract TherasShop is
   }
 
   receive() external payable {
-    // Ensure target contract is set
-        require(s_vendorAddress != address(0), "Target contract not set");
-
-        // Forward received Ether to target contract
-        (bool success, ) = s_vendorAddress.call{value: msg.value}("");
-        require(success, "Forwarding failed");
-
+    // Delegate call to the implementation contract
+    _delegate(_implementation());
   }
 
-    // Function to set the vendor  address
-    function setVendorAddress(address _targetContract) external onlyOwner {
-        s_vendorAddress = _targetContract;
+  function _implementation() internal view returns (address) {
+    return _getImplementation();
+  }
+
+  function _getImplementation() internal view returns (address impl) {
+    bytes32 slot = keccak256("eip1967.proxy.implementation");
+    assembly {
+      impl := sload(slot)
     }
+  }
+
+  function _delegate(address implementation) internal {
+    assembly {
+      // Copy msg.data. We take full control of memory in this inline assembly
+      // block because it will not return to Solidity code. We overwrite the
+      // Solidity scratch pad at memory position 0.
+      calldatacopy(0, 0, calldatasize())
+
+      // Call the implementation.
+      // out and outsize are 0 because we don't know the size yet.
+      let result := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
+
+      // Copy the returned data.
+      returndatacopy(0, 0, returndatasize())
+
+      switch result
+      // delegatecall returns 0 on error.
+      case 0 {
+        revert(0, returndatasize())
+      }
+      default {
+        return(0, returndatasize())
+      }
+    }
+  }
+
   function setupTherasFee(uint256 _fee) public onlyOwner {
     therasFee = _fee;
   }
@@ -180,13 +208,17 @@ contract TherasShop is
         adjustedPaymentAmount -= brokerCut;
       }
 
-      // todo: add checker to identify contact address
+      // todo: add checker to identify contact address has receive module
 
-      // Transfer the adjusted payment amount to the product address
-      payable(productAddress).transfer(adjustedPaymentAmount);
+      (bool success, ) = payable(productAddress).call{
+        value: adjustedPaymentAmount
+      }("");
+      require(success, "Failed to send Ether to product address");
 
-      // Handle payment to Therashop
-      payable(address(this)).transfer(therasFeeAmount);
+      (bool success2, ) = payable(address(this)).call{ value: therasFeeAmount }(
+        ""
+      );
+      require(success2, "Failed to send Ether to Therashop");
     } else {
       // Check if payment token is ERC20
       require(
