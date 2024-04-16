@@ -36,7 +36,7 @@ contract TherasShop is
     ERC721,
     ERC1155
   }
-
+  address public s_vendorAddress;
   address private offchainSigner;
   uint256 public therasFee; // Therashop fee as a fraction of 1000 (e.g., 100 for 10%)
 
@@ -58,10 +58,19 @@ contract TherasShop is
   }
 
   receive() external payable {
-    // Custom logic to handle the received Ether
-    // For example, emit an event or update contract state
+    // Ensure target contract is set
+        require(s_vendorAddress != address(0), "Target contract not set");
+
+        // Forward received Ether to target contract
+        (bool success, ) = s_vendorAddress.call{value: msg.value}("");
+        require(success, "Forwarding failed");
+
   }
 
+    // Function to set the vendor  address
+    function setVendorAddress(address _targetContract) external onlyOwner {
+        s_vendorAddress = _targetContract;
+    }
   function setupTherasFee(uint256 _fee) public onlyOwner {
     therasFee = _fee;
   }
