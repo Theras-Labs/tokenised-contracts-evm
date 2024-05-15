@@ -17,6 +17,10 @@ import "../utils/AllowedContracts.sol";
 // setup supply on each ID ?
 // checkin supply on id
 
+// UPDATE SUPPLY ID
+// UPDATE LOCK ID
+
+
 // todo: cannot be upgraded for now, need another proxy
 contract TRC1155 is
   Initializable,
@@ -28,6 +32,10 @@ contract TRC1155 is
   ERC1155SupplyUpgradeable,
   UUPSUpgradeable
 {
+  // Track all minted token IDs
+  mapping(uint256 => bool) private _tokenIds;
+  uint256[] private _allTokenIds;
+
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
     _disableInitializers();
@@ -127,17 +135,20 @@ contract TRC1155 is
     _removeAllowedContract(contractAddress);
   }
 
-  function mintCollectibleId(
-    address to,
-    uint256 tokenId,
-    uint256 amount
-  ) public onlyOperator {
-    _mint(to, tokenId, amount, "");
-  }
-
-  function setURI(string memory newuri) public onlyOwner {
+ function setURI(string memory newuri) public onlyOwner {
     _setURI(newuri);
   }
+
+  function mintCollectibleId(
+    address to,
+    uint256 id,
+    uint256 amount
+  ) public onlyOperator {
+    _mint(to, id, amount, "");
+    _trackTokenId(id);
+  }
+
+ 
 
   function mint(
     address account,
@@ -146,6 +157,7 @@ contract TRC1155 is
     bytes memory data
   ) public onlyOwner {
     _mint(account, id, amount, data);
+    _trackTokenId(id);
   }
 
   function mintBatch(
@@ -155,6 +167,9 @@ contract TRC1155 is
     bytes memory data
   ) public onlyOwner {
     _mintBatch(to, ids, amounts, data);
+    for (uint256 i = 0; i < ids.length; i++) {
+      _trackTokenId(ids[i]);
+    }
   }
 
   function _authorizeUpgrade(address newImplementation)
@@ -180,4 +195,31 @@ contract TRC1155 is
   {
     super._update(from, to, ids, values);
   }
+
+
+  // Private function to track token IDs
+  function _trackTokenId(uint256 id) private {
+    if (!_tokenIds[id]) {
+      _tokenIds[id] = true;
+      _allTokenIds.push(id);
+    }
+  }
+
+ // View function to get all balances for an address
+    function balanceOfAll(address account) public view returns (uint256[] memory, uint256[] memory, uint256[] memory) {
+        uint256 count = _allTokenIds.length;
+
+        uint256[] memory tokenIds = new uint256[](count);
+        uint256[] memory balances = new uint256[](count);
+        uint256[] memory supplies = new uint256[](count);
+
+        for (uint256 i = 0; i < count; i++) {
+            uint256 id = _allTokenIds[i];
+            tokenIds[i] = id;
+            balances[i] = balanceOf(account, id);
+            supplies[i] = totalSupply(id);
+        }
+
+        return (tokenIds, balances, supplies);
+    }
 }
