@@ -148,7 +148,6 @@ contract TRC1155 is
     _trackTokenId(id);
   }
 
- 
 
   function mint(
     address account,

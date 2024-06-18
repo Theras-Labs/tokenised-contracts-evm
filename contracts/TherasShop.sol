@@ -11,6 +11,10 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 interface IUniversalClaim {
   function mintToken(address to, uint256 amount) external; // respective to erc20
 
+  function mint(address to) external;
+
+  function safeMint(address to) external;
+
   function mintCollectible(address to) external; // respective to erc721
 
   function mintCollectibleId(
@@ -34,7 +38,9 @@ contract TherasShop is
   enum TokenType {
     ERC20,
     ERC721,
-    ERC1155
+    ERC1155,
+    ERC721_SAFE_MINT,
+    ERC721_MINT
   }
   address private offchainSigner;
   uint256 public therasFee; // Therashop fee as a fraction of 1000 (e.g., 100 for 10%)
@@ -265,6 +271,7 @@ contract TherasShop is
     }
   }
 
+  // todo: change into dynamically method name instead
   function __mintable(
     TokenType tokenType,
     address productAddress,
@@ -283,8 +290,19 @@ contract TherasShop is
         productId,
         quantity
       );
+    } else if (tokenType == TokenType.ERC721_SAFE_MINT) {
+      // + mint
+      // iterate base  quantity length
+      IUniversalClaim(productAddress).safeMint(msg.sender);
+    } else if (tokenType == TokenType.ERC721_MINT) {
+      // + mint
+      // iterate base  quantity length
+      IUniversalClaim(productAddress).mint(msg.sender);
     }
+    // ERC721mint -> quantity
   }
+
+  // function _mintQuantity()
 
   function pause() public onlyOwner {
     _pause();
