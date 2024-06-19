@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-// interface Ownable {
-//   function transferOwnership(address to) external;
-// }
+interface Ownable {
+  function transferOwnership(address to) external;
+}
 
 interface IUniversalClaim {
   function mintToken(address to, uint256 amount) external; // respective to erc20
@@ -28,7 +30,12 @@ interface IUniversalClaim {
   ) external; // respective to erc1155
 }
 
-contract TherasShop is Pausable, Ownable {
+contract TherasShop is
+  Initializable,
+  PausableUpgradeable,
+  OwnableUpgradeable,
+  UUPSUpgradeable
+{
   struct Ticket {
     bytes32 r;
     bytes32 s;
@@ -46,16 +53,65 @@ contract TherasShop is Pausable, Ownable {
   address private offchainSigner;
   uint256 public therasFee; // Therashop fee as a fraction of 1000 (e.g., 100 for 10%)
 
-  constructor(
+  // address public s_vendorAddress;
+
+  /// @custom:oz-upgrades-unsafe-allow constructor
+  constructor() {
+    _disableInitializers();
+  }
+
+  function initialize(
     address initialOwner,
     uint256 _fee,
     address _offchainSigner
-  ) Ownable(initialOwner) {
+  ) public initializer {
+    __Pausable_init();
+    __Ownable_init(initialOwner);
+    __UUPSUpgradeable_init();
     therasFee = _fee;
     offchainSigner = _offchainSigner;
   }
 
-  receive() external payable {}
+  receive() external payable {
+    // Delegate call to the implementation contract
+    _delegate(_implementation());
+  }
+
+  function _implementation() internal view returns (address) {
+    return _getImplementation();
+  }
+
+  function _getImplementation() internal view returns (address impl) {
+    bytes32 slot = keccak256("eip1967.proxy.implementation");
+    assembly {
+      impl := sload(slot)
+    }
+  }
+
+  function _delegate(address implementation) internal {
+    assembly {
+      // Copy msg.data. We take full control of memory in this inline assembly
+      // block because it will not return to Solidity code. We overwrite the
+      // Solidity scratch pad at memory position 0.
+      calldatacopy(0, 0, calldatasize())
+
+      // Call the implementation.
+      // out and outsize are 0 because we don't know the size yet.
+      let result := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
+
+      // Copy the returned data.
+      returndatacopy(0, 0, returndatasize())
+
+      switch result
+      // delegatecall returns 0 on error.
+      case 0 {
+        revert(0, returndatasize())
+      }
+      default {
+        return(0, returndatasize())
+      }
+    }
+  }
 
   function setupTherasFee(uint256 _fee) public onlyOwner {
     therasFee = _fee;
@@ -289,7 +345,11 @@ contract TherasShop is Pausable, Ownable {
     return offchainSigner;
   }
 
-  //   internal
+  function _authorizeUpgrade(address newImplementation)
+    internal
+    override
+    onlyOwner
+  {}
 
   function isVerifiedTicket(bytes32 _digest, Ticket memory _ticket)
     internal
