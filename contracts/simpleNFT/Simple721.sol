@@ -147,6 +147,14 @@ contract Theras_Simple721 is
     _safeMint(to, tokenId);
   }
 
+  function safeMintBatch(address to, uint256 quantity) public onlyOwner {
+    require(quantity > 0, "Quantity must be greater than 0");
+    for (uint256 i = 0; i < quantity; i++) {
+      uint256 tokenId = _nextTokenId++;
+      _safeMint(to, tokenId);
+    }
+  }
+
   function mint(address to) public onlyOwner {
     require(_nextTokenId < maxSupply, "Max supply reached");
     uint256 tokenId = _nextTokenId++;

@@ -8,12 +8,18 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
+interface Ownable {
+  function transferOwnership(address to) external;
+}
+
 interface IUniversalClaim {
   function mintToken(address to, uint256 amount) external; // respective to erc20
 
   function mint(address to) external;
 
   function safeMint(address to) external;
+
+  function safeMintBatch(address to, uint256 quantity) external;
 
   function mintCollectible(address to) external; // respective to erc721
 
@@ -40,7 +46,9 @@ contract TherasShop is
     ERC721,
     ERC1155,
     ERC721_SAFE_MINT,
-    ERC721_MINT
+    ERC721_MINT,
+    ERC721_SAFE_MINT_BATCH,
+    ERC721_SAFE_MINT_BATCH_SHOP
   }
   address private offchainSigner;
   uint256 public therasFee; // Therashop fee as a fraction of 1000 (e.g., 100 for 10%)
@@ -215,10 +223,12 @@ contract TherasShop is
       }
 
       // todo: add checker to identify contact address has receive module
-
+      // TODO: CHANGE TO VENDOR INSTEAD since some contract might not be able to receive
+      // and product address might be a middleware too? but should be fine?
       (bool success, ) = payable(productAddress).call{
         value: adjustedPaymentAmount
       }("");
+
       require(success, "Failed to send Ether to product address");
 
       (bool success2, ) = payable(address(this)).call{ value: therasFeeAmount }(
@@ -255,6 +265,7 @@ contract TherasShop is
         adjustedPaymentAmount -= brokerCut;
       }
 
+      // TODO: CHANGE TO VENDOR INSTEAD since some contract might not be able to receive
       // Transfer payment token to product address
       IERC20(paymentToken).transferFrom(
         msg.sender,
@@ -290,7 +301,9 @@ contract TherasShop is
         productId,
         quantity
       );
-    } else if (tokenType == TokenType.ERC721_SAFE_MINT) {
+    }
+    //  721 - MINT
+    else if (tokenType == TokenType.ERC721_SAFE_MINT) {
       // + mint
       // iterate base  quantity length
       IUniversalClaim(productAddress).safeMint(msg.sender);
@@ -298,11 +311,26 @@ contract TherasShop is
       // + mint
       // iterate base  quantity length
       IUniversalClaim(productAddress).mint(msg.sender);
+    } else if (tokenType == TokenType.ERC721_SAFE_MINT_BATCH) {
+      // + mint
+      // iterate base  quantity length
+      IUniversalClaim(productAddress).safeMintBatch(msg.sender, quantity);
+    } else if (tokenType == TokenType.ERC721_SAFE_MINT_BATCH_SHOP) {
+      // BATCH BY SHOP -> a lot of gas?
+      require(quantity > 0, "Quantity must be greater than 0");
+      for (uint256 i = 0; i < quantity; i++) {
+        IUniversalClaim(productAddress).safeMint(msg.sender);
+      }
     }
-    // ERC721mint -> quantity
   }
 
-  // function _mintQuantity()
+  // Function to transfer ownership of a managed contract
+  function transferManagedContractOwnership(
+    address contractAddress,
+    address newOwner
+  ) external onlyOwner {
+    Ownable(contractAddress).transferOwnership(newOwner);
+  }
 
   function pause() public onlyOwner {
     _pause();

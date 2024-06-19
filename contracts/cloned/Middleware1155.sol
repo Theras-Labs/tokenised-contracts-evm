@@ -1,0 +1,1 @@
+// for 1155 NFT as ownership
