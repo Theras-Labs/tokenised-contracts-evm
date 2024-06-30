@@ -40,7 +40,7 @@ interface IDynamicContract {
   ) external;
 }
 
-contract NFTProject is
+contract Badge721 is
   Initializable,
   ERC721Upgradeable,
   ERC721EnumerableUpgradeable,
