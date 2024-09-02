@@ -30,7 +30,7 @@ contract WormholeManager is IWormholeReceiver, AllowedContracts, Ownable {
   uint16 public wm_currentChain;
   uint16 public wm_hubChain = 16; // Moonbeam
   address public hubAddress; // moonbeam only
-  uint256 public receiverValue = 0; // Can be left 0, since we don't need an airdrop of gas token on destination contract
+  uint256 public s_receiverValue = 0; // Can be left 0, since we don't need an airdrop of gas token on destination contract
   uint256 public gasLimit = 500_000;
 
   constructor(
@@ -57,7 +57,7 @@ contract WormholeManager is IWormholeReceiver, AllowedContracts, Ownable {
 
   ///--------------------- VIEW
 
-  function getCost() public view returns (uint256 cost) {
+  function getCost(uint receiverValue) public view returns (uint256 cost) {
     (uint256 cost, ) = wormholeRelayer.quoteEVMDeliveryPrice(
       wm_hubChain,
       receiverValue,
@@ -88,12 +88,11 @@ contract WormholeManager is IWormholeReceiver, AllowedContracts, Ownable {
     address refundAddress,
     uint256 receiverValue
   ) external payable onlyOperator {
-    uint256 cost = getCost(); // Retrieve cost
+    uint256 cost = getCost(receiverValue); // Retrieve cost
     require(msg.value == cost, "crosschain fee mismatch");
-    // require(msg.value == receiverValue, "crosschain fee mismatch");
 
     // msgSender
-    wormholeRelayer.sendPayloadToEvm{ value: receiverValue }(
+    wormholeRelayer.sendPayloadToEvm{ value: cost }(
       // wormholeRelayer.sendPayloadToEvm{ value: cost }(
       wm_hubChain, // uint256
       hubAddress, // address
@@ -113,7 +112,7 @@ contract WormholeManager is IWormholeReceiver, AllowedContracts, Ownable {
     );
   }
 
-  // therasAddress -> reporter/responsible
+
   // might need pass value to cover gas mint?
   //-------------------
   function receiveWormholeMessages(
