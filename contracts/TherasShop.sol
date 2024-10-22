@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./wormhole/interface/IWormholeSupport.sol";
+import "./wormhole/IWormholeSupport.sol";
 
 interface IUniversalClaim {
   function mintToken(address to, uint256 amount) external; // respective to erc20
@@ -40,7 +40,6 @@ contract TherasShop is Pausable, Ownable {
     ERC721_MINT,
     ERC721_SAFE_MINT_BATCH,
     ERC721_SAFE_MINT_BATCH_SHOP
-
     // ERC404
   }
   enum ActionType {
@@ -70,10 +69,12 @@ contract TherasShop is Pausable, Ownable {
   constructor(
     address initialOwner,
     uint256 _fee,
-    address _offchainSigner
+    address _offchainSigner,
+    address _managerWormhole
   ) Ownable(initialOwner) {
     therasFee = _fee;
     offchainSigner = _offchainSigner;
+    s_managerWormhole = _managerWormhole;
   }
 
   receive() external payable {}
@@ -111,7 +112,9 @@ contract TherasShop is Pausable, Ownable {
 
   // claim cross + receive fund
   // buy cross product
-  function TEST_buyCrossProduct(
+  //
+  function buyCrossProduct(
+    // bytes memory payload,
     // /////////
     uint256 wm_receiverValue, // -> calculations  -> actually wrong and seems not needed yet
     uint256 wm_targetChain,
@@ -124,10 +127,10 @@ contract TherasShop is Pausable, Ownable {
     address productAddress,
     address recipientAddress, //
     uint256 receiverValue // calculate if it's in array // Ticket
-  ) external {
+  ) external payable {
     // WormholeManager.getCost() -> // not needed here, use it offchain
     bytes memory payload = abi.encode(
-      true, // isArray,
+      false, // isArray,
       wm_receiverValue, // -> can be array
       wm_targetChain, //-> can be array
       endManagerAddress, // -> can be array
@@ -144,202 +147,224 @@ contract TherasShop is Pausable, Ownable {
     IWormholeSupport(s_managerWormhole).forwardWormholeTask(
       payload,
       msg.sender,
-      receiverValue //should be from wm_receiverValue calculations
+      receiverValue //should be from wm_receiverValue calculations 1000
     );
   }
 
-  function TEST_buyCrossProduct(
+  function test_buyCrossProduct(
+    // bytes memory payload,
+    bool isArray,
     // /////////
-    uint256 wm_receiverValue, // -> calculations  -> actually wrong and seems not needed yet?
-    uint256 wm_targetChain,
+    // uint256 wm_receiverValue, // -> calculations  -> actually wrong and seems not needed yet
+    uint16 wm_endTargetChain,
     address endManagerAddress,
-    address actionAddress,
-    ActionType actionType,
-    TokenType tokenType,
+    address actionAddress, // shop address
     uint256 productId,
     uint256 quantity,
     address productAddress,
     address recipientAddress, //
     uint256 receiverValue // calculate if it's in array // Ticket
-  ) external {
-    // WormholeManager.getCost() -> // not needed here, use it offchain
+  ) external payable {
     bytes memory payload = abi.encode(
-      true, // isArray,
-      wm_receiverValue, // -> can be array
-      wm_targetChain, //-> can be array
-      endManagerAddress, // -> can be array
-      actionAddress, // -> the end contract either [ shop, bridge, or craft ]
-      actionType, // ->   the end action will either  mint, mintBatch, locking, transfer, unlock
-      tokenType, // -> erc721, erc1155, erc20, dnd404, unknown
-      productId, // -> tokenId,
-      quantity, // ->
-      productAddress, //  -> contract NFT/token address,
-      recipientAddress, //
-      block.timestamp
+      isArray, // isArray,
+      wm_endTargetChain, // targetEndChain
+      endManagerAddress, //
+      actionAddress, //
+      productId, //
+      quantity, //
+      productAddress, //
+      recipientAddress //
     );
-
-    IWormholeSupport(s_managerWormhole).forwardWormholeTask(
+    ////
+    // receivervalue -> calculation moonbeam -> END chain
+    IWormholeSupport(s_managerWormhole).TEST_forwardWormholeTask(
       payload,
       msg.sender,
-      receiverValue //should be from wm_receiverValue calculations if it's array
+      receiverValue //should be from wm_receiverValue calculations 1000
     );
   }
 
-  function buyCrossProduct(
-    uint256 wm_receiverValue,
-    uint256 wm_targetChain,
+  function test_buyCrossProduct_x(
+    // bytes memory payload,
+    bool isArray,
+    // /////////
+    // uint256 wm_receiverValue, // -> calculations  -> actually wrong and seems not needed yet
+    uint16 wm_endTargetChain,
     address endManagerAddress,
-    address actionAddress,
-    ActionType actionType,
-    TokenType tokenType,
+    address actionAddress, // shop address
     uint256 productId,
     uint256 quantity,
     address productAddress,
-    address recipientAddress,
-    uint256 receiverValue,
-    // default args
-    bool isNativeToken,
-    address payable productAddress,
-    address paymentToken,
-    uint256 paymentAmount, // price base
-    uint256 productId,
-    uint256 quantity,
-    TokenType tokenType, //todo: remove this and use from contracts?? // shopAddress?? broker sale?
-    uint256 payoutAmount, // For broker
-    uint256 payoutPercentageDenominator, // For broker
-    address payable brokerAddress,
-    Ticket memory _ticket // bytes detail
-  ) public payable {
-    // 1. encode with msg.sender
-    bytes32 digest = keccak256(
-      abi.encode(
-        msg.sender,
-        isNativeToken,
-        productAddress,
-        paymentToken,
-        paymentAmount,
-        productId,
-        quantity,
-        tokenType,
-        payoutAmount,
-        payoutPercentageDenominator,
-        brokerAddress
-      )
-    );
-
-    require(isVerifiedTicket(digest, _ticket), "Invalid ticket");
-
-    // change price * quantity??
-    // uint256 _fullPrice = paymentAmount * quantity //payment amount already setup from offchain
-    __paymentDistribution(
-      isNativeToken,
-      productAddress, // Changed to payable address
-      paymentToken,
-      paymentAmount, // Full price
-      payoutAmount, // For broker
-      payoutPercentageDenominator, // For broker
-      brokerAddress
-    );
-
-    bytes memory payload = abi.encode(
-      true, // isArray,
-      wm_receiverValue, // -> can be array
-      wm_targetChain, //-> can be array
-      endManagerAddress, // -> can be array
-      actionAddress, // -> the end contract either [ shop, bridge, or craft ]
-      actionType, // ->   the end action will either  mint, mintBatch, locking, transfer, unlock
-      tokenType, // -> erc721, erc1155, erc20, dnd404, unknown
-      productId, // -> tokenId,
-      quantity, // ->
-      productAddress, //  -> contract NFT/token address,
-      recipientAddress, //
-      block.timestamp
-    );
-
-    IWormholeSupport(s_managerWormhole).forwardWormholeTask(
-      payload,
-      msg.sender,
-      receiverValue //should be from wm_receiverValue calculations if it's array
-    );
-  }
-
-  // overload for array version
-  function TEST_buyCrossProduct(
-    /////////
-    bool isArray,
-    uint256[] memory wm_receiverValue, //store disni [base, sepolia, base] -> [3000, 2000, 3000] ->  value 3000 + 2000  as COST (not sure if not im using different COST here?)
-    uint256[] memory wm_targetChain,
-    address[] memory endManagerAddress,
-    address[] memory actionAddress,
-    ActionType[] memory actionType,
-    TokenType[] memory tokenType,
-    uint256[] memory productId,
-    uint256[] memory quantity,
-    address[] memory productAddress,
-    address[] memory recipientAddress,
-    address refundAddress,
-    uint256 receiverValue,
-    address refundAddress,
+    address recipientAddress, //
     uint256 receiverValue // calculate if it's in array // Ticket
-  ) {
-    // similar for single
+  ) external payable {
+    // receivervalue -> calculation moonbeam -> END chain
+    IWormholeSupport(s_managerWormhole).DIRECT_TEST_forwardWormholeTask(
+      isArray,
+      // uint256 wm_receiverValue, // -> calculations  -> actually wrong and seems not needed yet
+      wm_endTargetChain, // targetEndChain
+      endManagerAddress, //
+      actionAddress, //
+      productId, //
+      quantity, //
+      productAddress, //
+      recipientAddress, //
+      msg.sender, //
+      receiverValue //
+    );
   }
+
+  function test_buyCrossProduct_y(
+    bool isArray,
+    // uint256 wm_receiverValue, // -> calculations  -> actually wrong and seems not needed yet
+    uint16 wm_endTargetChain, // targetEndChain
+    address endManagerAddress, //
+    address actionAddress, //
+    uint256 productId, //
+    uint256 quantity, //
+    address productAddress, //
+    address recipientAddress, //
+    address refundAddress, //
+    uint256 receiverValue //
+  ) external payable {
+    // receivervalue -> calculation moonbeam -> END chain
+    IWormholeSupport(s_managerWormhole).DIRECT_TEST_forwardWormholeTask_2(
+      isArray,
+      // uint256 wm_receiverValue, // -> calculations  -> actually wrong and seems not needed yet
+      wm_endTargetChain, // targetEndChain
+      endManagerAddress, //
+      actionAddress, //
+      productId, //
+      quantity, //
+      productAddress, //
+      recipientAddress, //
+      refundAddress, //
+      receiverValue //
+    );
+  }
+
+  // array version
+  // function buyCrossProduct(
+  //   // i make it into argument to make it easier on manually block explorer
+  //   bytes memory payload,
+  // i make it into argument to make it easier on manually block explorer
+  // bytes memory payload,
+  // /////////
+  // bool isArray,
+  // uint[] memory wm_receiverValue, //store disni [base, sepolia, base] -> [3000, 2000, 3000] ->  value 3000 + 2000  as COST (not sure if not im using different COST here?)
+  // uint[] memory wm_targetChain,
+  // address[] memory endManagerAddress,
+  // address[] memory actionAddress,
+  // ActionType[] memory actionType,
+  // TokenType[] memory tokenType,
+  // uint[] memory productId,
+  // uint[] memory quantity,
+  // address[] memory productAddress,
+  // address[] memory recipientAddress,
+  // address refundAddress,
+  // uint256 receiverValue,
+  //   address refundAddress,
+  //   uint256 receiverValue, // calculate if it's in array
+  //   // Ticket
+  // ) {
+  //   // if isArray true
+  //   // require(payloadIndex < actionType.length, "Invalid payload array");
+  //   // require(length == actionType.length, "Invalid length array");
+
+  //   // WormholeManager.getCost() -> // not needed here, use it offchain
+  //   IWormholeSupport(s_managerWormhole).forwardWormholeTask(
+  //     payload,
+  //     msg.sender,
+  //     receiverValue
+  //   );
+  // }
 
   // single
   function receivedWormholeTask(bytes memory payload) external {
-    //check only from Manager
+    // //check only from Manager // ignore for testing
     require(
       msg.sender == address(s_managerWormhole),
       "Only wormhole manager allowed"
     );
 
     (
-      bool isArray,
-      uint256 wm_receiverValue,
-      uint256 wm_targetChain,
+      ,
+      uint16 wm_endTargetChain, //  targetEndChain
       address endManagerAddress,
       address actionAddress,
-      ActionType actionType,
-      TokenType tokenType,
       uint256 productId,
-      uint256 quantity, //[] ->
-      address productAddress, //[] -> contract NFT/token address,
-      address recipientAddress, //[]
-      uint256 timestamp
+      uint256 quantity,
+      address productAddress,
+      address recipientAddress
     ) = abi.decode(
         payload,
         (
           bool,
+          uint16, //  targetEndChain
+          address,
+          address,
           uint256,
           uint256,
           address,
-          address,
-          ActionType,
-          TokenType,
-          uint256,
-          uint256,
-          address,
-          address,
-          uint256
+          address
         )
       );
 
-    if (actionType == ActionType.MINT) {
-      __mintable(
-        tokenType,
-        productAddress,
-        productId,
-        quantity,
-        recipientAddress
-      );
-    }
+    __mintable(
+      TokenType.ERC1155, //1155
+      productAddress,
+      productId,
+      quantity,
+      recipientAddress
+    );
+
+    // (
+    //   bool isArray,
+    //   uint256 wm_receiverValue,
+    //   uint256 wm_targetChain,
+    //   address endManagerAddress,
+    //   address actionAddress,
+    //   ActionType actionType,
+    //   TokenType tokenType,
+    //   uint256 productId,
+    //   uint256 quantity, //[] ->
+    //   address productAddress, //[] -> contract NFT/token address,
+    //   address recipientAddress, //[]
+    //   uint256 timestamp
+    // ) = abi.decode(
+    //     payload,
+    //     (
+    //       bool,
+    //       uint256,
+    //       uint256,
+    //       address,
+    //       address,
+    //       ActionType,
+    //       TokenType,
+    //       uint256,
+    //       uint256,
+    //       address,
+    //       address,
+    //       uint256
+    //     )
+    //   );
+
+    // if (actionType == ActionType.MINT) {
+    //   __mintable(
+    //     tokenType,
+    //     productAddress,
+    //     productId,
+    //     quantity,
+    //     recipientAddress
+    //   );
+    // }
     // ActionType.TRANSFER
     // ActionType.BURN
   }
 
-  // for multiple task
-  // FOR ARRAY won't needed to ITERATE THE TASK, since wmanager sending it multiple times and iterated already
-  // overload for array
+  // multiple
+  // FOR ARRAY NOT ITERATE THE TASK, since wmanager sending it multiple times and iterated already
+  //   overload for array
   function receivedWormholeTask(
     bytes memory payload,
     uint256 payloadIndex,
@@ -347,59 +372,91 @@ contract TherasShop is Pausable, Ownable {
   ) external {
     //check only from Manager
     require(msg.sender == address(s_managerWormhole), "Only manager allowed");
+
     (
-      bool isArray,
-      uint256[] memory wm_receiverValue,
-      uint256[] memory wm_targetChain,
+      ,
+      uint16[] memory wm_endTargetChain, //  targetEndChain
       address[] memory endManagerAddress,
       address[] memory actionAddress,
-      uint256[] memory actionType,
-      uint256[] memory tokenType,
       uint256[] memory productId,
       uint256[] memory quantity,
       address[] memory productAddress,
-      address[] memory recipientAddress,
-      uint256 timestamp
+      address[] memory recipientAddress
     ) = abi.decode(
         payload,
         (
           bool,
-          uint256[],
-          uint256[],
+          uint16[], //  targetEndChain
           address[],
           address[],
           uint256[],
           uint256[],
-          uint256[],
-          uint256[],
           address[],
-          address[],
-          uint256
+          address[]
         )
       );
 
-    if (actionType[payloadIndex] == ActionType.MINT) {
-      __mintable(
-        tokenType[payloadIndex],
-        productAddress[payloadIndex],
-        productId[payloadIndex],
-        quantity[payloadIndex],
-        recipientAddress[payloadIndex]
-      );
-    }
+    // (
+    //   bool isArray,
+    //   uint256[] memory wm_receiverValue,
+    //   uint256[] memory wm_targetChain,
+    //   address[] memory endManagerAddress,
+    //   address[] memory actionAddress,
+    //   uint256[] memory actionType,
+    //   uint256[] memory tokenType,
+    //   uint256[] memory productId,
+    //   uint256[] memory quantity,
+    //   address[] memory productAddress,
+    //   address[] memory recipientAddress,
+    //   uint256 timestamp
+    // ) = abi.decode(
+    //     payload,
+    //     (
+    //       bool,
+    //       uint256[],
+    //       uint256[],
+    //       address[],
+    //       address[],
+    //       uint256[],
+    //       uint256[],
+    //       uint256[],
+    //       uint256[],
+    //       address[],
+    //       address[],
+    //       uint256
+    //     )
+    //   );
 
-    // Emit an event for auditing and tracking
-    emit WormholeTaskProcessed(
-      msg.sender,
-      payloadIndex,
-      queueIndex,
-      actionType[payloadIndex],
-      tokenType[payloadIndex],
+    __mintable(
+      TokenType.ERC1155, //1155
       productAddress[payloadIndex],
       productId[payloadIndex],
       quantity[payloadIndex],
       recipientAddress[payloadIndex]
     );
+
+    // if (actionType[payloadIndex] == ActionType.MINT) {
+    //   __mintable(
+    //     tokenType[payloadIndex],
+    //     productAddress[payloadIndex],
+    //     productId[payloadIndex],
+    //     quantity[payloadIndex],
+    //     recipientAddress[payloadIndex]
+    //   );
+    // }
+
+    // Emit an event for auditing and tracking
+    // emit WormholeTaskProcessed(
+    //   msg.sender,
+    //   payloadIndex,
+    //   queueIndex,
+    //   actionType[payloadIndex] ,
+    //     tokenType[payloadIndex],
+    //   productAddress[payloadIndex],
+    //   productId[payloadIndex],
+    //   quantity[payloadIndex],
+    //   recipientAddress[payloadIndex]
+    // );
   }
 
   // todo: cannot quantity 0 or minus?
@@ -451,6 +508,7 @@ contract TherasShop is Pausable, Ownable {
     );
 
     __mintable(tokenType, productAddress, productId, quantity);
+    //emit Events
   }
 
   function __paymentDistribution(
